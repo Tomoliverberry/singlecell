@@ -39,3 +39,39 @@ doubleScores <- addDoubletScores(
 project <- ArchRProject(
     ArrowFiles = Arrowfiles, outputDirectory = "singlecell", copyArrows = TRUE
 )
+saveArchRProject(project, outputDirectory = "save_proj_1", load = FALSE)
+
+#Remove Doublets
+project_nodoublets <- filterDoublets(project)
+#Dimentionality Reduction with Iterative LSI
+project_LSI <- addIterativeLSI(
+    ArchRProj = project_nodoublets,
+    name = "IterativeLSI",
+    iterations = 2,
+    clusterParams = list(
+        resolution = c(0.2), 
+        sampleCells = 10000, 
+        n.start = 10), 
+    varFeatures = 25000, 
+    dimsToUse = 1:30
+)
+
+BiocManager::install("harmony", force = TRUE)
+
+#Batch correction
+project_batch_corrected <- addHarmony(
+     ArchRProj = project_LSI,
+     reducedDims = "IterativeLSI",
+     name = "Harmony",
+     groupBy = "Sample"
+ )
+ 
+ project_cluster <- addClusters(
+     input = project_batch_corrected,
+     reducedDims = "IterativeLSI",
+     method = "Seurat",
+     name = "Clusters",
+ )
+ 
+ table(project_cluster$Clusters)
+ cM <- confusionMatrix(paste0(project_cluster$Clusters), paste0(project_cluster$Sample))
