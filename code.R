@@ -58,6 +58,14 @@ project_LSI <- addIterativeLSI(
 
 BiocManager::install("harmony", force = TRUE)
 
+#Clustering without batch correction
+project_cluster_nobatchcorrection <- addClusters(
+     input = project_LSI,
+     reducedDims = "IterativeLSI",
+     method = "Seurat",
+     name = "Clusters",
+ )
+
 #Batch correction
 project_batch_corrected <- addHarmony(
      ArchRProj = project_LSI,
@@ -65,13 +73,32 @@ project_batch_corrected <- addHarmony(
      name = "Harmony",
      groupBy = "Sample"
  )
- 
+ #Clustering batch corrected project file
  project_cluster <- addClusters(
      input = project_batch_corrected,
-     reducedDims = "IterativeLSI",
+     reducedDims = "Harmony",
      method = "Seurat",
      name = "Clusters",
  )
+
+#Make 2 matricies, showing number of cells per cluster for each donor. Compare to view reduced number of cells from batch correction.
+cM_nobatchcorrection <- confusionMatrix(paste0(project_cluster_nobatchcorrection$Clusters), paste0(project_cluster_nobatchcorrection$Sample))
+cM <- confusionMatrix(paste0(project_cluster$Clusters), paste0(project_cluster$Sample))
  
- table(project_cluster$Clusters)
- cM <- confusionMatrix(paste0(project_cluster$Clusters), paste0(project_cluster$Sample))
+#RNAseq data read in
+seurat.fc <- readRDS("seurat.pfc.final.rds")
+seurat.fc$cellIDs <- gsub('FC-', '', seurat.fc$cellIDs)
+
+#Integrate atac-seq data and rna-seq data together using batch corrected data going forward
+atac_and_rna <- addGeneIntegrationMatrix(
+     ArchRProj = project_cluster,
+     useMatrix = "GeneScoreMatrix",
+     matrixName = "GeneIntegrationMatrix",
+     reducedDims = "Harmony",
+     seRNA = seurat.fc,
+     addToArrow = FALSE,
+     groupRNA = "cellIDs",
+     nameCell = "predictedCell_Un",
+     nameGroup = "predictedGroup_Un",
+     nameScore = "predictedScore_Un"
+ )
