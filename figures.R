@@ -131,5 +131,31 @@ table_cell_cluster_all %<>% adorn_totals(dat = table_cell_cluster_all, where = "
 #Remove rows containing donor specific data and column containing "Total" cell
 table_cell_cluster_all <- table_cell_cluster_all[-c(1,2,3), ]
 table_cell_cluster_all <- table_cell_cluster_all[,-1]
+                                    
+#UMAPs------------------------------------------------------------------------------------------------------------------------
+#IterativeLSI UMAP------------------------------------------------------------------------------------------------------------
+project_cluster <- addUMAP(
+    ArchRProj = project_cluster,
+    reducedDims = "IterativeLSI",
+    name = "UMAP",
+    nNeighbors = 30,
+    minDist = 0.5,
+    metric = "cosine"
+)
+plot_UMAP_by_cluster <- plotEmbedding(ArchRProj = project_cluster, colorBy = "cellColData", name = "Clusters", embedding = "UMAP")
+plot_UMAP_by_donor <- plotEmbedding(ArchRProj = project_cluster, colorBy = "cellColData", name = "Sample", embedding = "UMAP")
+
+#Harmony UMAP-----------------------------------------------------------------------------------------------------------------
+
+project_cluster <- addUMAP(
+    ArchRProj = project_cluster,
+    reducedDims = "Harmony",
+    name = "UMAP",
+    nNeighbors = 30,
+    minDist = 0.5,
+    metric = "cosine"
+)
+plot_UMAP_by_cluster_harmony <- plotEmbedding(ArchRProj = project_cluster, colorBy = "cellColData", name = "Clusters", embedding = "UMAP")
+plot_UMAP_by_donor_harmony <- plotEmbedding(ArchRProj = project_cluster, colorBy = "cellColData", name = "Sample", embedding = "UMAP")
 
 ------------------------------------------------------------------------------------------------------------------------------
