@@ -1,27 +1,17 @@
-#Check current working directory
 getwd()
-
-#Get required packages
 if (!requireNamespace("devtools", quietly = TRUE)) install.packages("devtools")
 if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
 devtools::install_github("GreenleafLab/ArchR", ref="master", repos = BiocManager::repositories())
-BiocManager::install("BSgenome.Hsapiens.UCSC.hg38", force = TRUE)
-BiocManager::install("Matrix", force = TRUE)
-
-#Setting Rtools on PATH
 writeLines('PATH="${RTOOLS40_HOME}\\usr\\bin;${PATH}"', con = "~/.Renviron")
 Sys.which("make")
 
-#Set working directory
-setwd("C:/Users/Tom/Desktop/single_cell/")
-#Set sample name vector and load ArchR package
+setwd("C:/Users/Tom Berry/Desktop/single_cell/")
 SAMPLES <- c("510", "611", "993")
 library(ArchR)
-
-#Set genome reference to hg38, this is required on each start-up
+BiocManager::install("BSgenome.Hsapiens.UCSC.hg38", force = TRUE)
+BiocManager::install("Matrix", force = TRUE)
 addArchRGenome("hg38")
 
-#Create Arrowfiles for compatible use of the data with ArchR
 Arrowfiles <- createArrowFiles(
     inputFiles = c(paste0("C:/Users/Tom/Desktop/single_cell/FastFile-3aEnrFqAw78jBfpr/", SAMPLES[1], "_FC_fragments.tsv.gz"), 
                   paste0("C:/Users/Tom/Desktop/single_cell/FastFile-3aEnrFqAw78jBfpr/", SAMPLES[2], "_FC_fragments.tsv.gz"),
@@ -30,19 +20,18 @@ Arrowfiles <- createArrowFiles(
     minTSS = 4, 
     minFrags = 1000)
 
-#Doubletscores
-doubleScores <- addDoubletScores(
-    input = Arrowfiles, k = 10, knnMethod = "UMAP", LSIMethod = 1
-	)
 
-#Make ArchRProject file, "copyArrows = TRUE" makes a backup copy of the arrowfiles.
+
 project <- ArchRProject(
     ArrowFiles = Arrowfiles, outputDirectory = "singlecell", copyArrows = TRUE
 )
+
+
 saveArchRProject(project, outputDirectory = "save_proj_1", load = FALSE)
 
 #Remove Doublets
-project_nodoublets <- filterDoublets(project)
+project_doubletscore <- addDoubletScores(input = project, k = 10, knnMethod = "UMAP", LSIMethod = 1)
+project_nodoublets <- filterDoublets(project_doubletscore)
 #Dimentionality Reduction with Iterative LSI
 project_LSI <- addIterativeLSI(
     ArchRProj = project_nodoublets,
@@ -55,41 +44,45 @@ project_LSI <- addIterativeLSI(
     varFeatures = 25000, 
     dimsToUse = 1:30
 )
-
 BiocManager::install("harmony", force = TRUE)
 
-#Clustering without batch correction
+#No batch correction
 project_cluster_nobatchcorrection <- addClusters(
      input = project_LSI,
      reducedDims = "IterativeLSI",
      method = "Seurat",
      name = "Clusters",
  )
+ 
+#Cluster counts no batch correction IterativeLSI
+install.packages("pheatmap)
+library(pheatmap)
+cluster_counts <- as.data.frame(t(as.data.frame(as.vector((table(project_cluster_nobatchcorrection$Clusters))))))
+rownames(cluster_counts) <- NULL
+colnames(cluster_counts) <- names(table(project_cluster_nobatchcorrection$Clusters)) 
 
 #Batch correction
-project_batch_corrected <- addHarmony(
+project_cluster <- addHarmony(
      ArchRProj = project_LSI,
      reducedDims = "IterativeLSI",
      name = "Harmony",
      groupBy = "Sample"
  )
- #Clustering batch corrected project file
- project_cluster <- addClusters(
-     input = project_batch_corrected,
+ 
+project_cluster <- addClusters(
+     input = project_cluster,
      reducedDims = "Harmony",
      method = "Seurat",
-     name = "Clusters",
+     name = "Clusters_Harmony",
  )
-
-#Make 2 matricies, showing number of cells per cluster for each donor. Compare to view reduced number of cells from batch correction.
+ 
 cM_nobatchcorrection <- confusionMatrix(paste0(project_cluster_nobatchcorrection$Clusters), paste0(project_cluster_nobatchcorrection$Sample))
 cM <- confusionMatrix(paste0(project_cluster$Clusters), paste0(project_cluster$Sample))
  
-#RNAseq data read in
-seurat.fc <- readRDS("seurat.pfc.final.rds")
+ #RNAseq data read in
+ seurat.fc <- readRDS("seurat.pfc.final.rds")
 seurat.fc$cellIDs <- gsub('FC-', '', seurat.fc$cellIDs)
 
-#Integrate atac-seq data and rna-seq data together using batch corrected data going forward
 atac_and_rna <- addGeneIntegrationMatrix(
      ArchRProj = project_cluster,
      useMatrix = "GeneScoreMatrix",
@@ -102,3 +95,13 @@ atac_and_rna <- addGeneIntegrationMatrix(
      nameGroup = "predictedGroup_Un",
      nameScore = "predictedScore_Un"
  )
+ 
+cM_atac_rna <- as.matrix(confusionMatrix(atac_and_rna$Clusters, atac_and_rna$predictedGroup_Un))
+preClust <- colnames(cM_atac_rna)[apply(cM_atac_rna, 1, which.max)]
+cbind(preClust, rownames(cM_atac_rna))
+
+unique(unique(atac_and_rna$predictedGroup_Un))
+ExN <- paste0(c(1,3,4,7,10,12), collapse = "|")
+InN <- paste0(c(2,9,13,14), collapse = "|")
+RG <- paste0(c(6,5), collapse = "|")
+MG <- paste0(8, collapse = "|")
