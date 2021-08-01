@@ -22,7 +22,7 @@ Arrowfiles <- createArrowFiles(
 
 
 
-project <- ArchRProject(
+project1 <- ArchRProject(
     ArrowFiles = Arrowfiles, outputDirectory = "singlecell", copyArrows = TRUE
 )
 
@@ -30,11 +30,11 @@ project <- ArchRProject(
 saveArchRProject(project, outputDirectory = "save_proj_1", load = FALSE)
 
 #Remove Doublets
-project_doubletscore <- addDoubletScores(input = project, k = 10, knnMethod = "UMAP", LSIMethod = 1)
-project_nodoublets <- filterDoublets(project_doubletscore)
+doubletscore <- addDoubletScores(input = project1, k = 10, knnMethod = "UMAP", LSIMethod = 1)
+project2 <- filterDoublets(doubletscore)
 #Dimentionality Reduction with Iterative LSI
-project_LSI <- addIterativeLSI(
-    ArchRProj = project_nodoublets,
+project2 <- addIterativeLSI(
+    ArchRProj = project2,
     name = "IterativeLSI",
     iterations = 2,
     clusterParams = list(
@@ -47,48 +47,53 @@ project_LSI <- addIterativeLSI(
 BiocManager::install("harmony", force = TRUE)
 
 #No batch correction
-project_cluster_nobatchcorrection <- addClusters(
-     input = project_LSI,
+project2 <- addClusters(
+     input = project2,
      reducedDims = "IterativeLSI",
      method = "Seurat",
-     name = "Clusters",
+     name = "Clusters_no_batch_correction",
  )
  
 #Cluster counts no batch correction IterativeLSI
-install.packages("pheatmap)
+install.packages("pheatmap")
 library(pheatmap)
-cluster_counts <- as.data.frame(t(as.data.frame(as.vector((table(project_cluster_nobatchcorrection$Clusters))))))
+cluster_counts <- as.data.frame(t(as.data.frame(as.vector((table(project2$Clusters_no_batch_correction))))))
 rownames(cluster_counts) <- NULL
-colnames(cluster_counts) <- names(table(project_cluster_nobatchcorrection$Clusters)) 
+colnames(cluster_counts) <- names(table(project2$Clusters_no_batch_correction)) 
 
 #Batch correction
-project_cluster <- addHarmony(
-     ArchRProj = project_LSI,
+project2 <- addHarmony(
+     ArchRProj = project2,
      reducedDims = "IterativeLSI",
      name = "Harmony",
      groupBy = "Sample"
  )
  
-project_cluster <- addClusters(
-     input = project_cluster,
+project2 <- addClusters(
+     input = project2,
      reducedDims = "Harmony",
      method = "Seurat",
      name = "Clusters_Harmony",
  )
- 
-cM_nobatchcorrection <- confusionMatrix(paste0(project_cluster_nobatchcorrection$Clusters), paste0(project_cluster_nobatchcorrection$Sample))
-cM <- confusionMatrix(paste0(project_cluster$Clusters), paste0(project_cluster$Sample))
- 
- #RNAseq data read in
- seurat.fc <- readRDS("seurat.pfc.final.rds")
-seurat.fc$cellIDs <- gsub('FC-', '', seurat.fc$cellIDs)
 
-atac_and_rna <- addGeneIntegrationMatrix(
-     ArchRProj = project_cluster,
+#Cluster counts batch corrected 
+cluster_counts_harmony <- as.data.frame(t(as.data.frame(as.vector((table(project2$Clusters_Harmony))))))
+rownames(cluster_counts) <- NULL
+colnames(cluster_counts) <- names(table(project2$Clusters_Harmony)) 
+ 
+cM_nobatchcorrection <- confusionMatrix(paste0(project2$Clusters_no_batch_correction), paste0(project2$Sample))
+cM <- confusionMatrix(paste0(project2$Clusters_Harmony), paste0(project2$Sample))
+ 
+#RNAseq data read in
+RNAseq <- readRDS("seurat.pfc.final.rds")
+RNAseq$cellIDs <- gsub('FC-', '', RNAseq$cellIDs)
+
+project2 <- addGeneIntegrationMatrix(
+     ArchRProj = project2,
      useMatrix = "GeneScoreMatrix",
      matrixName = "GeneIntegrationMatrix",
      reducedDims = "Harmony",
-     seRNA = seurat.fc,
+     seRNA = RNAseq,
      addToArrow = FALSE,
      groupRNA = "cellIDs",
      nameCell = "predictedCell_Un",
@@ -96,12 +101,21 @@ atac_and_rna <- addGeneIntegrationMatrix(
      nameScore = "predictedScore_Un"
  )
  
-cM_atac_rna <- as.matrix(confusionMatrix(atac_and_rna$Clusters, atac_and_rna$predictedGroup_Un))
-preClust <- colnames(cM_atac_rna)[apply(cM_atac_rna, 1, which.max)]
-cbind(preClust, rownames(cM_atac_rna))
+cM <- as.matrix(confusionMatrix(project2$Clusters_Harmony, project2$predictedGroup_Un))
+preClust <- colnames(cM)[apply(cM, 1, which.max)]
+cbind(preClust, rownames(cM))
 
-unique(unique(atac_and_rna$predictedGroup_Un))
-ExN <- paste0(c(1,3,4,7,10,12), collapse = "|")
-InN <- paste0(c(2,9,13,14), collapse = "|")
-RG <- paste0(c(6,5), collapse = "|")
-MG <- paste0(8, collapse = "|")
+unique(unique(project2$predictedGroup_Un))
+ExN <- paste0(c(1,2,3,4,8,11), collapse = "|")
+InN <- paste0(c(7,10,13,14), collapse = "|")
+RG <- paste0(c(5,6), collapse = "|")
+MG <- paste0(9, collapse = "|")
+Else <- paste0(c(12,15), collapse="|")
+
+clustExN <- rownames(cM)[grep(ExN, preClust)]
+clustInN <- rownames(cM)[grep(InN, preClust)]
+clustRG <- rownames(cM)[grep(RG, preClust)]
+clustMG <- rownames(cM)[grep(MG, preClust)]
+clustElse <- rownames(cM)[grep(Else, preClust)]
+
+RNA <- RNAseq[grep(clust, RNAseq$cellIDs)]
