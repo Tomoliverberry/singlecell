@@ -106,11 +106,11 @@ preClust <- colnames(cM)[apply(cM, 1, which.max)]
 cbind(preClust, rownames(cM))
 
 unique(unique(project2$predictedGroup_Un))
-ExN <- paste0(c(1,2,3,4,8,11), collapse = "|")
-InN <- paste0(c(7,10,13,14), collapse = "|")
-RG <- paste0(c(5,6), collapse = "|")
-MG <- paste0(9, collapse = "|")
-Else <- paste0(c(12,15), collapse="|")
+ExN <- paste0(c("ExN-1","ExN-3","ExN-5","ExN-2","ExN-4","ExN-6"), collapse = "|")
+InN <- paste0(c("InN-1","InN-2","InN-3","InN-4"), collapse = "|")
+RG <- paste0(c("RG-1","RG-2"), collapse = "|")
+MG <- paste0("MG", collapse = "|")
+Else <- paste0(c("IP","CycPro"), collapse="|")
 
 clustExN <- rownames(cM)[grep(ExN, preClust)]
 clustInN <- rownames(cM)[grep(InN, preClust)]
