@@ -119,3 +119,6 @@ clustMG <- rownames(cM)[grep(MG, preClust)]
 clustElse <- rownames(cM)[grep(Else, preClust)]
 
 RNA <- RNAseq[grep(clust, RNAseq$cellIDs)]
+RNAcells_ExN <- colnames(RNAseq)[grep(pattern = clustExN, x = RNAseq$cellIDs)]
+RNAcells_InN <- colnames(RNAseq)[grep(pattern = clustInN, x = RNAseq$cellIDs)]
+RNAcells_RG <- colnames(RNAseq)[grep(pattern = clustRG, x = RNAseq$cellIDs)]
