@@ -119,6 +119,95 @@ clustMG <- rownames(cM)[grep(MG, preClust)]
 clustElse <- rownames(cM)[grep(Else, preClust)]
 
 RNA <- RNAseq[grep(clust, RNAseq$cellIDs)]
-RNAcells_ExN <- colnames(RNAseq)[grep(pattern = clustExN, x = RNAseq$cellIDs)]
-RNAcells_InN <- colnames(RNAseq)[grep(pattern = clustInN, x = RNAseq$cellIDs)]
-RNAcells_RG <- colnames(RNAseq)[grep(pattern = clustRG, x = RNAseq$cellIDs)]
+RNAcells_ExN <- colnames(RNAseq)[grep(pattern = ExN, x = RNAseq$cellIDs)]
+RNAcells_InN <- colnames(RNAseq)[grep(pattern = InN, x = RNAseq$cellIDs)]
+RNAcells_RG <- colnames(RNAseq)[grep(pattern = RG, x = RNAseq$cellIDs)]
+
+groupList <- SimpleList(
+     ExNlist = SimpleList(
+         ATAC = project2$cellNames[project2$Clusters_Harmony %in% clustExN],
+         RNA = RNAcells_ExN
+     ),
+     InNlist = SimpleList(
+         ATAC = project2$cellNames[project2$Clusters_Harmony %in% clustInN],
+         RNA = RNAcells_InN
+     ),
+     RGlist =  SimpleList(
+         ATAC = project2$cellNames[project2$Clusters_Harmony %in% clustRG],
+         RNA = RNAcells_RG	
+     )
+ )
+
+project2 <- addGeneIntegrationMatrix(
+    ArchRProj = project2,
+    useMatrix = "GeneScoreMatrix",
+    matrixName = "GeneIntegrationMatrix",
+    reducedDims = "Harmony",
+    seRNA = RNAseq,
+    addToArrow = FALSE,
+    groupList = groupList,
+    groupRNA = "cellIDs",
+    nameCell = "predictedCell_Co",
+    nameGroup = "predictedGroup_Co",
+    nameScore = "predictedScore_Co"
+)
+
+pal <- paletteDiscrete(values = RNAseq$cellIDs)
+
+atac_and_rna_p1 <- plotEmbedding(
+    project2, 
+    colorBy = "cellColData", 
+    name = "predictedGroup_Un", 
+    pal = pal
+)
+
+atac_and_rna_p2 <- plotEmbedding(
+    project2, 
+    colorBy = "cellColData", 
+    name = "predictedGroup_Co", 
+    pal = pal
+)
+
+#Pseudo-bulk Replicates in ArchR
+
+project3 <- addGeneIntegrationMatrix(
+    ArchRProj = project2, 
+    useMatrix = "GeneScoreMatrix",
+    matrixName = "GeneIntegrationMatrix",
+    reducedDims = "Harmony",
+    seRNA = RNAseq,
+    addToArrow = TRUE,
+    force= TRUE,
+    groupList = groupList,
+    groupRNA = "cellIDs",
+    nameCell = "predictedCell",
+    nameGroup = "predictedGroup",
+    nameScore = "predictedScore"
+)
+
+#changing cluster labels to cell types present in RNA seq data
+
+cM2 <- confusionMatrix(project3$Clusters_Harmony, project3$predictedGroup)
+labelOld <- rownames(cM2)
+labelNew <- colnames(cM2)[apply(cM2, 1, which.max)]
+
+project3$Clusters_Harmony <- mapLabels(project3$Clusters_Harmony, newLabels = labelNew, oldLabels = labelOld)
+
+p1 <- plotEmbedding(project3, colorBy = "cellColData", name = "Clusters_Harmony")
+
+#making pseudo bulk replicates
+
+project4 <- addGroupCoverages(ArchRProj = project3, groupBy = "Clusters_Harmony")
+
+#Calling peaks with tile matrix
+
+project4@projectMetadata$outputDirectory <- "C:/Users/Tom/Desktop/single_cell/save_proj_1"
+
+project4 <- addReproduciblePeakSet(
+    ArchRProj = project4, 
+    groupBy = "Clusters_Harmony",
+    peakMethod = "Tiles",
+    method = "p",
+    cutOff = 0.01,
+    extendSummits = 500
+)
