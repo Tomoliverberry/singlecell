@@ -5,12 +5,14 @@ devtools::install_github("GreenleafLab/ArchR", ref="master", repos = BiocManager
 writeLines('PATH="${RTOOLS40_HOME}\\usr\\bin;${PATH}"', con = "~/.Renviron")
 Sys.which("make")
 
-setwd("C:/Users/Tom Berry/Desktop/single_cell/")
-SAMPLES <- c("510", "611", "993")
+setwd("C:/Users/Tom/Desktop/single_cell/")
+
 library(ArchR)
 BiocManager::install("BSgenome.Hsapiens.UCSC.hg38", force = TRUE)
 BiocManager::install("Matrix", force = TRUE)
 addArchRGenome("hg38")
+
+SAMPLES <- c("510", "611", "993")
 
 Arrowfiles <- createArrowFiles(
     inputFiles = c(paste0("C:/Users/Tom/Desktop/single_cell/FastFile-3aEnrFqAw78jBfpr/", SAMPLES[1], "_FC_fragments.tsv.gz"), 
@@ -23,15 +25,17 @@ Arrowfiles <- createArrowFiles(
 
 
 project1 <- ArchRProject(
-    ArrowFiles = Arrowfiles, outputDirectory = "singlecell", copyArrows = TRUE
+    ArrowFiles = Arrowfiles, outputDirectory = "C:/Users/Tom/Desktop/single_cell", copyArrows = TRUE
 )
 
 
-saveArchRProject(project, outputDirectory = "save_proj_1", load = FALSE)
+saveArchRProject(project1, outputDirectory = "C:/Users/Tom/Desktop/single_cell", load = FALSE)
 
 #Remove Doublets
 doubletscore <- addDoubletScores(input = project1, k = 10, knnMethod = "UMAP", LSIMethod = 1)
+
 project2 <- filterDoublets(doubletscore)
+
 #Dimentionality Reduction with Iterative LSI
 project2 <- addIterativeLSI(
     ArchRProj = project2,
@@ -77,16 +81,19 @@ project2 <- addClusters(
  )
 
 #Cluster counts batch corrected 
-cluster_counts_harmony <- as.data.frame(t(as.data.frame(as.vector((table(project2$Clusters_Harmony))))))
-rownames(cluster_counts) <- NULL
-colnames(cluster_counts) <- names(table(project2$Clusters_Harmony)) 
+#cluster_counts_harmony <- as.data.frame(t(as.data.frame(as.vector((table(project2$Clusters_Harmony))))))
+#rownames(cluster_counts) <- NULL
+#colnames(cluster_counts) <- names(table(project2$Clusters_Harmony)) 
  
 cM_nobatchcorrection <- confusionMatrix(paste0(project2$Clusters_no_batch_correction), paste0(project2$Sample))
 cM <- confusionMatrix(paste0(project2$Clusters_Harmony), paste0(project2$Sample))
  
 #RNAseq data read in
+
 RNAseq <- readRDS("seurat.pfc.final.rds")
 RNAseq$cellIDs <- gsub('FC-', '', RNAseq$cellIDs)
+
+#unconstrained integration
 
 project2 <- addGeneIntegrationMatrix(
      ArchRProj = project2,
@@ -116,9 +123,7 @@ clustExN <- rownames(cM)[grep(ExN, preClust)]
 clustInN <- rownames(cM)[grep(InN, preClust)]
 clustRG <- rownames(cM)[grep(RG, preClust)]
 clustMG <- rownames(cM)[grep(MG, preClust)]
-clustElse <- rownames(cM)[grep(Else, preClust)]
 
-RNA <- RNAseq[grep(clust, RNAseq$cellIDs)]
 RNAcells_ExN <- colnames(RNAseq)[grep(pattern = ExN, x = RNAseq$cellIDs)]
 RNAcells_InN <- colnames(RNAseq)[grep(pattern = InN, x = RNAseq$cellIDs)]
 RNAcells_RG <- colnames(RNAseq)[grep(pattern = RG, x = RNAseq$cellIDs)]
@@ -149,7 +154,11 @@ project2 <- addGeneIntegrationMatrix(
     groupRNA = "cellIDs",
     nameCell = "predictedCell_Co",
     nameGroup = "predictedGroup_Co",
-    nameScore = "predictedScore_Co"
+    nameScore = "predictedScore_Co",
+	dimsToUse = 1:26,
+	k.score = 26,
+	npcs = 26,
+	dims = 1:26
 )
 
 pal <- paletteDiscrete(values = RNAseq$cellIDs)
@@ -191,23 +200,25 @@ cM2 <- confusionMatrix(project3$Clusters_Harmony, project3$predictedGroup)
 labelOld <- rownames(cM2)
 labelNew <- colnames(cM2)[apply(cM2, 1, which.max)]
 
-project3$Clusters_Harmony <- mapLabels(project3$Clusters_Harmony, newLabels = labelNew, oldLabels = labelOld)
+project3$Clusters_RNAmapped <- mapLabels(project3$Clusters_Harmony, newLabels = labelNew, oldLabels = labelOld)
 
-p1 <- plotEmbedding(project3, colorBy = "cellColData", name = "Clusters_Harmony")
+p1 <- plotEmbedding(project3, colorBy = "cellColData", name = "Clusters_RNAmapped")
 
 #making pseudo bulk replicates
 
-project4 <- addGroupCoverages(ArchRProj = project3, groupBy = "Clusters_Harmony")
+project4 <- addGroupCoverages(ArchRProj = project3, groupBy = "Clusters_RNAmapped")
 
 #Calling peaks with tile matrix
 
-project4@projectMetadata$outputDirectory <- "C:/Users/Tom/Desktop/single_cell/save_proj_1"
+project4@projectMetadata$outputDirectory <- "C:/Users/Tom/Desktop/single_cell"
 
 project4 <- addReproduciblePeakSet(
     ArchRProj = project4, 
-    groupBy = "Clusters_Harmony",
+    groupBy = "Clusters_RNAmapped",
     peakMethod = "Tiles",
     method = "p",
     cutOff = 0.01,
     extendSummits = 500
 )
+
+getPeakSet(project4)
